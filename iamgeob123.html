@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Camera Object Detection</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.6.0/dist/tf.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <style>
+    body { margin: 0; display: flex; flex-direction: column; align-items: center; }
+    #container { position: relative; width: 640px; height: 480px; }
+    video, canvas { position: absolute; top: 0; left: 0; }
+    #camSelect { margin: 10px; position: static; }
+  </style>
+</head>
+<body>
+  <select id="camSelect">
+    <option value="user">Front Camera</option>
+    <option value="environment">Back Camera</option>
+  </select>
+  <div id="container">
+    <video id="video" width="640" height="480" autoplay muted playsinline></video>
+    <canvas id="overlay" width="640" height="480"></canvas>
+  </div>
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('overlay');
+    const ctx = canvas.getContext('2d');
+    const camSelect = document.getElementById('camSelect');
+    let model = null;
+
+    async function getCameraStream(facingMode = "user") {
+      try {
+        return await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: facingMode } }
+        });
+      } catch (e) {
+        const fallback = facingMode === "user" ? "environment" : "user";
+        return navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: fallback } }
+        });
+      }
+    }
+
+    async function startCamera() {
+      const facing = camSelect.value;
+      const stream = await getCameraStream(facing);
+      video.srcObject = stream;
+    }
+
+    camSelect.addEventListener('change', startCamera);
+
+    // Object detection with COCO-SSD
+    cocoSsd.load().then(m => {
+      model = m;
+      startCamera();
+    });
+
+    video.addEventListener('play', () => {
+      async function detectObjects() {
+        if (video.paused || video.ended || !model) return;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const predictions = await model.detect(video);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        predictions.forEach(pred => {
+          ctx.beginPath();
+          ctx.rect(...pred.bbox);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = 'red';
+          ctx.fillStyle = 'red';
+          ctx.stroke();
+          ctx.fillText(pred.class + ' (' + Math.round(pred.score * 100) + '%)', pred.bbox[0], pred.bbox[1] > 10 ? pred.bbox[1] - 5 : 10);
+        });
+        requestAnimationFrame(detectObjects);
+      }
+      detectObjects();
+    });
+  </script>
+</body>
+</html>
+
+
+
